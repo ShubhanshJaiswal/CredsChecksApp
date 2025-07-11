@@ -386,7 +386,7 @@ public class HomeController : Controller
         try
         {
             /* ── 1.  Get hot browser instance ───────────────────────────── */
-            var browser = await _ph.GetBrowserAsync(UseFirefox ? "firefox" : "chromium", );
+            var browser = await _ph.GetBrowserAsync(UseFirefox ? "firefox" : "chromium");
 
             var context = await browser.NewContextAsync(new BrowserNewContextOptions
             {
