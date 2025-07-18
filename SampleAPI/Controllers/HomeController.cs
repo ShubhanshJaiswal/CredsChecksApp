@@ -177,7 +177,7 @@ public class HomeController : Controller
 
                 // Nevada
                 case "nv":
-                       return await VerifyNevadaLogin(model);                  
+                    return await VerifyNevadaLogin(model);
 
                 // New Hampshire
                 case "nh":
@@ -196,7 +196,7 @@ public class HomeController : Controller
 
                 // New York
                 case "ny":
-                       return await VerifyNewYorkLogin(model);
+                    return await VerifyNewYorkLogin(model);
 
                 // North Carolina
                 case "nc":
@@ -239,8 +239,8 @@ public class HomeController : Controller
 
                 // South Dakota
                 case "sd":
-                    //    return await VerifySouthDakotaLogin(model);
-                    return new JsonResult(new { success = false, message = "Under Development...." });
+                    return await VerifySouthDakotaLogin(model);
+                //return new JsonResult(new { success = false, message = "Under Development...." });
 
                 // Tennessee
                 case "tn":
@@ -249,8 +249,8 @@ public class HomeController : Controller
 
                 // Texas
                 case "tx":
-                    //    return await VerifyTexasLogin(model);
-                    return new JsonResult(new { success = false, message = "Under Development...." });
+                    return await VerifyTexasLogin(model);
+                //return new JsonResult(new { success = false, message = "Under Development...." });
 
                 // Utah
                 case "ut":
@@ -264,8 +264,8 @@ public class HomeController : Controller
 
                 // Virginia
                 case "va":
-                    //    return await VerifyVirginiaLogin(model);
-                    return new JsonResult(new { success = false, message = "Under Development...." });
+                        return await VerifyVirginiaLogin(model);
+                    //return new JsonResult(new { success = false, message = "Under Development...." });
 
                 // Washington DC
                 case "dc":
@@ -288,8 +288,8 @@ public class HomeController : Controller
 
                 // Wyoming
                 case "wy":
-                    //    return await VerifyWyomingLogin(model);
-                    return new JsonResult(new { success = false, message = "Under Development...." });
+                        return await VerifyWyomingLogin(model);
+                    //return new JsonResult(new { success = false, message = "Under Development...." });
 
                 default:
                     return new JsonResult(new { success = false, message = "Unsupported state" });
@@ -373,6 +373,200 @@ public class HomeController : Controller
             success,
             message = success ? "Login successful." : "Invalid credentials."
         });
+    }
+
+    [HttpPost("/SouthDakotaLogin")]
+    public async Task<JsonResult> VerifySouthDakotaLogin(LoginModel model)
+    {
+        const string LoginUrl = "https://apps.sd.gov/RV23EPath/Login.aspx";
+
+        var browser = await _ph.GetBrowserAsync();
+        var context = await browser.NewContextAsync();
+
+        // Optional: block unnecessary resources
+        await context.RouteAsync("**/*", route =>
+        {
+            var type = route.Request.ResourceType;
+            if (type is "image" or "stylesheet" or "font")
+                return route.AbortAsync();
+            return route.ContinueAsync();
+        });
+
+        var page = await context.NewPageAsync();
+
+        try
+        {
+            await page.GotoAsync(LoginUrl, new() { WaitUntil = WaitUntilState.NetworkIdle });
+
+            // Fill form fields
+            await page.FillAsync("input[name='ctl00$Content$txtUserName']", model.username);
+            await page.FillAsync("input[name='ctl00$Content$txtPassword']", model.password);
+
+            // Click the button
+            await page.ClickAsync("input[name='ctl00$Content$btnContinue']");
+
+            var loginResult = await Task.WhenAny(
+                page.WaitForSelectorAsync("text=The username or password you have entered is incorrect", new() { Timeout = 5000 }),
+                page.WaitForSelectorAsync("text=Main Menu", new() { Timeout = 5000 }),
+                page.WaitForSelectorAsync("input[id='ctl00_Content_btnExit']", new() { Timeout = 5000 })
+                );
+
+            // Now re-check the DOM safely
+            if (await page.IsVisibleAsync("text=The username or password you have entered is incorrect"))
+            {
+                return new JsonResult(new { success = false, message = "Invalid username or password" });
+            }
+
+            if (await page.IsVisibleAsync("input[id='ctl00_Content_btnExit']") || await page.IsVisibleAsync("text=Main Menu"))
+            {
+                return new JsonResult(new { success = true, message = "Login successful" });
+            }
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Unexpected response."
+            });
+        }
+        catch (Exception ex)
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Error during login: " + ex.Message
+            });
+        }
+        finally
+        {
+            await context.CloseAsync();
+        }
+    }
+    [HttpPost("/TexasLogin")]
+    public async Task<JsonResult> VerifyTexasLogin(LoginModel model)
+    {
+        try { 
+        using (var httpClient = new HttpClient())
+        {
+            var jsonBody = new
+            {
+                userId = model.username,
+                model.password
+            };
+
+            var jsonContent = new StringContent(System.Text.Json.JsonSerializer.Serialize(jsonBody), System.Text.Encoding.UTF8, "application/json");
+
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+
+            var response = await httpClient.PostAsync("https://security.app.cpa.state.tx.us/users/v2/authenticate", jsonContent);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+
+            if (response.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                if (responseContent.Contains("false"))
+                {
+                    return new JsonResult(new { success = false, message = "Login Successful." });
+                }
+            }
+
+            if (response.StatusCode == System.Net.HttpStatusCode.UnprocessableContent)
+            {
+                if (responseContent.Contains("User ID or Password is invalid"))
+                {
+                    return new JsonResult(new { success = false, message = "Invalid Credentials.." });
+                }
+                
+            }
+        }
+        return new JsonResult(new { success = false, message = "Unexpected response from server" });
+
+        }
+        catch (Exception ex)
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Error during login: " + ex.Message
+            });
+        }
+    }
+
+    [HttpGet("/Virginialogin")]
+    public async Task<JsonResult> VerifyVirginiaLogin(LoginModel model)
+    {
+        if(string.IsNullOrEmpty(model.accountNumber))
+            return new JsonResult(new { success = false, message = "Please provide Account Number with body as key of accountNumber." });
+
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false, // We want to detect the 302 redirect
+            UseCookies = true,
+            CookieContainer = new CookieContainer()
+        };
+
+        using var httpClient = new HttpClient(handler);
+        httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+
+        // Step 1: GET the login page to retrieve ViewState
+        var loginPageResponse = await httpClient.GetAsync("https://www.business.tax.virginia.gov/VTOL/tax/Login.xhtml");
+        var loginPageHtml = await loginPageResponse.Content.ReadAsStringAsync();
+
+        // Extract javax.faces.ViewState
+        var viewStateMatch = Regex.Match(loginPageHtml, @"name=""javax\.faces\.ViewState""[^>]*value=""([^""]+)""");
+        if (!viewStateMatch.Success)
+            return new JsonResult(new { success = false, message = "Could not retrieve ViewState." });
+
+
+        string viewState = viewStateMatch.Groups[1].Value;
+
+        // Step 2: Submit the login form
+        var formContent = new FormUrlEncodedContent(new[]
+        {
+        new KeyValuePair<string, string>("loginForm", "loginForm"),
+        new KeyValuePair<string, string>("loginForm:customerType", "T"),
+        new KeyValuePair<string, string>("loginForm:customerNumber", model.accountNumber),
+        new KeyValuePair<string, string>("loginForm:userName", model.username),
+        new KeyValuePair<string, string>("loginForm:password", model.password),
+        new KeyValuePair<string, string>("loginForm:loginButton", "Log In"),
+        new KeyValuePair<string, string>("javax.faces.ViewState", viewState),
+    });
+
+        var postResponse = await httpClient.PostAsync("https://www.business.tax.virginia.gov/VTOL/tax/Login.xhtml", formContent);
+        var postContent = await postResponse.Content.ReadAsStringAsync();
+
+        if (postResponse.StatusCode == HttpStatusCode.OK)
+        {
+            // Login failed, look for the error message
+            if (postContent.Contains("The combination of Account Number,User ID and Password does not match our records"))
+            {
+                return new JsonResult(new { success = false, message = "Invalid username, password, or account number." });
+            }
+
+            return new JsonResult(new { success = false, message = "Invalid username, password, or account number." });
+
+
+        }
+        else if (postResponse.StatusCode == HttpStatusCode.Found)
+        {
+            // Login successful, follow redirect
+            if (postResponse.Headers.Location != null)
+            {
+                var nextPageUrl = new Uri(postResponse.Headers.Location.OriginalString);
+                var homePageResponse = await httpClient.GetAsync(nextPageUrl);
+                var homeHtml = await homePageResponse.Content.ReadAsStringAsync();
+
+                // Verify the customer number appears on the page
+                if (homeHtml.Contains("mojarra.jsfcljs") && homeHtml.Contains("'logout':'true'"))
+                {
+                    return new JsonResult(new { success = true, message = "Login successful." });
+                }
+
+                return new JsonResult(new { success = true, message = "Login successful." });
+            }
+
+           
+        }
+        return new JsonResult(new { success = false, message = "Unexpected response status." });
     }
     [HttpGet("/NewYorklogin")]
     public async Task<JsonResult> VerifyNewYorkLogin(LoginModel model)
@@ -607,6 +801,74 @@ public class HomeController : Controller
         });
     }
 
+    [HttpGet("/Wyominglogin")]
+    public async Task<JsonResult> VerifyWyomingLogin(LoginModel model)
+    {
+        var browser = await _ph.GetBrowserAsync();
+
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        });
+
+        var page = await context.NewPageAsync();
+
+        try
+        {
+            await page.GotoAsync("https://excise-wyifs.wy.gov/default.aspx?ReturnUrl=%2fSalesUse%2fMain.aspx", new() { WaitUntil = WaitUntilState.NetworkIdle });
+
+            await page.ClickAsync("span[class='close']");
+            // Fill form fields (all IDs/names as per original HTML)
+            await page.FillAsync("input[name='ctl00$CenterContent$txtUserName']", model.username);
+            await page.FillAsync("input[name='ctl00$CenterContent$txtPassword']", model.password);
+            await page.FillAsync("input[name='ctl00$CenterContent$txtPin']", model.pin);
+
+            await page.ClickAsync("input[name='ctl00$CenterContent$btnSignIn']");
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+            // Check for login failure message span
+            var errorVisible = await page.Locator("#ctl00_CenterContent_lblErrorMessage").IsVisibleAsync();
+
+            if (errorVisible)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Invalid credentials. Login failed."
+                });
+            }
+
+            // Look for the 'Log Out' anchor with class 'biggertext'
+            var logoutVisible = await page.Locator("a.biggertext", new() { HasTextString = "Log Out" }).IsVisibleAsync();
+
+            if (logoutVisible)
+            {
+                return new JsonResult(new
+                {
+                    success = true,
+                    message = "Login successful."
+                });
+            }
+
+            // Fallback case: page did not show expected success or error indicators
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Unknown login result. 'Log Out' link not found."
+            });
+        }
+        catch (Exception ex)
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = $"Exception occurred: {ex.Message}"
+            });
+        }
+    }
+
+
 
     [HttpGet("/Washingtonlogin")]
     public async Task<JsonResult> VerifyWashingtonLogin(LoginModel model)
@@ -728,9 +990,9 @@ public class HomeController : Controller
             if (response.StatusCode == System.Net.HttpStatusCode.OK)
             {
                 var responseContent = await response.Content.ReadAsStringAsync();
-                if (responseContent.Contains("Incorrect email address or password"))
+                if (responseContent.Contains("Invalid Credentials.."))
                 {
-                    return new JsonResult(new { success = false, message = "Incorrect email address or password" });
+                    return new JsonResult(new { success = false, message = "Invalid Credentials.." });
                 }
                 else
                 {
@@ -816,9 +1078,11 @@ public class HomeController : Controller
 }
 
 
-    public class LoginModel
+public class LoginModel
 {
     public string username { get; set; }
+    public string accountNumber { get; set; } = string.Empty;
+    public string pin { get; set; } = string.Empty;
     public string password { get; set; }
     public string state { get; set; }
 }
